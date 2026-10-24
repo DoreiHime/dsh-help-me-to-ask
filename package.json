@@ -47,5 +47,13 @@
   "author": "Dorei Hime",
   "publishConfig": {
     "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DoreiHime/dsh-help-me-to-ask.git"
+  },
+  "homepage": "https://github.com/DoreiHime/dsh-help-me-to-ask",
+  "bugs": {
+    "url": "https://github.com/DoreiHime/dsh-help-me-to-ask/issues"
   }
 }

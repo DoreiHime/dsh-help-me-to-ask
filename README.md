@@ -1,5 +1,7 @@
 # 提问引导 · dsh-HelpMe-To-Ask
 
+> 仓库：[github.com/DoreiHime/dsh-help-me-to-ask](https://github.com/DoreiHime/dsh-help-me-to-ask)
+
 你好呀，谢谢你点进来看。
 
 做这个小插件的原因其实挺朴素的：我在 DSH 里干活的时候，经常一开始只说一句“帮我搞一下这个”，等模型吭哧吭哧做完，才发现方向不太对，又要推倒重来。后来就想，要是有个东西能在动手之前先轻轻问一句“你是想要 A 还是 B 呀”，大概能少很多来回。
