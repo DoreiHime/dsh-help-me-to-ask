@@ -82,6 +82,8 @@ dsh plugin add dsh-help-me-to-ask
 
 写这个插件的时候被 DSH 的社区帮了很多，也谢谢愿意试用它的你。
 
+如果有什么想跟我说的，可以发邮件到 **doreihime.cn@gmail.com**，我看到会回。
+
 MIT License。
 
 ---
@@ -159,5 +161,7 @@ See [CHANGELOG.md](CHANGELOG.md).
 ### Thanks
 
 DSH’s community helped me a lot while building this, and thank you for giving it a try.
+
+If you want to reach me, email **doreihime.cn@gmail.com** — I read it.
 
 MIT License.
