@@ -1,0 +1,51 @@
+{
+  "name": "dsh-help-me-to-ask",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "提问引导（dsh-HelpMe-To-Ask）：在模型动手前先问清楚目标、交付物与验收标准，整理成结构化任务简报。",
+  "icon": "icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "clarification",
+    "task-brief",
+    "effective-asking",
+    "prompt",
+    "agent"
+  ],
+  "license": "MIT",
+  "author": "Dorei Hime",
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,9 @@
+# dsh-HelpMe-To-Ask 的 bundle patch：把插件挂进本 profile 的配置树。
+# 行 id 即设置命名空间（设置面板通过它读写配置），不要改动。
+- insert:
+    - id: dsh-help-me-to-ask
+      name: 'dsh-help-me-to-ask'
+      config:
+        enabled: true
+        triggerMode: vague
+        maxClarifyRounds: 3
