@@ -22,18 +22,21 @@ const DRIFT_SIGNAL_RE = /(换个|改成|改为|换方向|重新来|不是这个|
 const GREETING_WORDS = [
   '你好', '您好', '在吗', '在不在', '在嘛', '嗨', '哈喽', 'hello', 'hi', 'hey',
   '早上好', '早安', '晚上好', '晚安', '谢谢', '感谢', '多谢', '辛苦了',
-  '好的', '好', 'ok', 'okay', '嗯', '哈哈',
+  '好的', 'thanks', 'thank you', 'ok', 'okay', '宝宝', '宝贝', '亲爱的', '好',
 ]
+const GREETING_FILLER_RE = /(宝宝|宝贝|宝子|亲爱的|宝|亲|呀|啊|哦|呢|啦|嘛|哈|嘿|嗯|呜|哇|喵|滴|哒)/g
 function isGreetingOnly(text) {
   if (typeof text !== 'string') return false
-  let cleaned = text.toLowerCase().replace(/[\s!！。,.，~～?？、…]/g, '')
-  cleaned = cleaned.replace(/(呀|啊|喵|呢|哦|啦)+$/, '')
-  if (!cleaned || cleaned.length > 14) return false
-  return GREETING_WORDS.some((word) => {
-    if (word === '嗯') return /^嗯+$/.test(cleaned)
-    if (word === '哈哈') return /^哈+$/.test(cleaned)
-    return cleaned === word
-  })
+  let cleaned = text
+    .toLowerCase()
+    .replace(/[\s!！。,.，~～?？、…:：;；"'“”‘’()（）\[\]【】]/g, '')
+  if (!cleaned || cleaned.length > 60) return false
+  // 去掉所有问候词和语气/称呼填充词；只剩空空如也才认为是纯寒暄。
+  for (const word of [...GREETING_WORDS].sort((a, b) => b.length - a.length)) {
+    cleaned = cleaned.split(word).join('')
+  }
+  cleaned = cleaned.replace(GREETING_FILLER_RE, '')
+  return cleaned.length === 0
 }
 
 export const name = 'dsh-help-me-to-ask'
@@ -307,7 +310,7 @@ async function handlePreStep(ctx, config, seen, pendings, sessions, agent, paylo
     if (!analysis) return next()
     diag('analyze', { sessionId, analysis })
     const mode = config.triggerMode.get()
-    const shouldAsk = onceArmed || mode === 'always'
+    const shouldAsk = onceArmed
       ? true
       : analysis.needClarify === true || (mode === 'complex' && analysis.complexity === 'high')
     // 本会话的“首段工作内容”已处理；一次性接管同时自动关闭。
@@ -403,14 +406,14 @@ function finishMessages(decision, messages) {
 }
 
 function briefMessage(brief) {
-  const lines = ['[本次对话任务简报]']
+  const lines = ['[当前聊天窗口 · 任务说明]']
   if (brief.goal) lines.push(`目标：${brief.goal}`)
   if (brief.deliverable) lines.push(`交付物：${brief.deliverable}`)
   if (Array.isArray(brief.constraints) && brief.constraints.length) lines.push(`范围/限制：${brief.constraints.join('；')}`)
   if (Array.isArray(brief.acceptance) && brief.acceptance.length) lines.push(`验收标准：${brief.acceptance.join('；')}`)
   if (Array.isArray(brief.outOfScope) && brief.outOfScope.length) lines.push(`不做：${brief.outOfScope.join('；')}`)
   if (Array.isArray(brief.assumptions) && brief.assumptions.length) lines.push(`假设：${brief.assumptions.join('；')}`)
-  lines.push('（以上由智能预检在生成前与用户确认；后续回复请围绕该简报展开。用户若调整目标，请主动更新简报。）')
+  lines.push('（以上由「提问引导」在生成前与你确认；后续回复请围绕这份任务说明展开。目标变化时可以更新它。）')
   return {
     id: randomUUID(),
     role: 'user',

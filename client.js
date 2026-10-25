@@ -38,22 +38,22 @@ window.__ModuleLoader__.load({
         nav: 'Ask Guide',
         title: 'Ask Guide',
         intro:
-          'Before the first answer, when a request is vague, a strong reasoning model asks only for genuinely missing information and turns the answers into a short task sheet: what to do, what you get, how “done” is judged. The sheet is injected into the conversation, so the model knows exactly what to do. No model / reasoning routing.',
+          'Before the first answer, when a request is vague, a strong reasoning model asks only for genuinely missing information and turns the answers into a short task sheet: what to do, what you get, how “done” is judged. The sheet is injected into the current chat, so the model knows exactly what to do. No model / reasoning routing.\n\nA “chat window” means one conversation thread; a “message” means one thing you send.',
         basics: 'Basics',
         enabledLabel: 'Enable pre-answer clarification',
         trigger: 'When to clarify',
         triggerVague: 'Only when the request is vague',
-        triggerVagueDesc: 'Ask first when goal / deliverable / constraints are missing (recommended).',
+        triggerVagueDesc: 'On the first real work message of each chat window, ask first when goal / deliverable / constraints are missing (recommended).',
         triggerComplex: 'Also for complex tasks',
-        triggerComplexDesc: 'Even a clear goal gets a quick detail check when the task looks complex.',
-        triggerAlways: 'Every new session',
-        triggerAlwaysDesc: 'Only on the first real work message of each session; greetings are ignored.',
+        triggerComplexDesc: 'On the first real work message of each chat window, also check details when the task looks complex.',
+        triggerAlways: 'Every new chat window',
+        triggerAlwaysDesc: 'Only on the first real work message of each chat window; greetings are ignored.',
         triggerOff: 'Off',
         triggerOffDesc: 'Never ask; behave like the native app.',
-        triggerSessionSkip: 'Skip in this conversation',
-        triggerSessionSkipDesc: 'No clarification here; other conversations keep their setting.',
+        triggerSessionSkip: 'Skip this window',
+        triggerSessionSkipDesc: 'No clarification in this chat window; other chat windows keep their setting.',
         triggerOnce: 'Help me out once',
-        triggerOnceDesc: 'Take over the next message in this conversation once, then return to the current mode automatically.',
+        triggerOnceDesc: 'Take over the next message in this chat window once, then return to the current mode.',
         stateVague: 'Vague',
         stateComplex: 'Complex',
         stateAlways: 'Every chat',
@@ -61,9 +61,9 @@ window.__ModuleLoader__.load({
         stateOnce: 'Once',
         stateOff: 'Off',
         sectionBehavior: 'Follow-up behavior',
-        triggerHint: 'Pick how proactive the clarification should be. Pure greetings are ignored; the plugin waits for real work intent.',
+        triggerHint: 'Pure greetings (like “hi”) are ignored; the plugin waits for real work intent before judging.',
         foldAsk: 'When to ask',
-        foldSession: 'This conversation',
+        foldSession: 'This window',
         foldMore: 'More settings',
         foldBasic: 'Basics',
         foldBrain: 'Brain model (used for the plugin analysis)',
@@ -128,30 +128,30 @@ window.__ModuleLoader__.load({
         quickSkip: 'Skipped here',
         quickTitle: 'Ask Guide',
         quickHint: 'Full settings: Settings → Ask Guide',
-        sessionSection: 'This conversation',
+        sessionSection: 'This chat window',
         sessionSkip: 'Skip clarification here',
-        sessionSkipHint: 'Only this conversation is skipped.',
+        sessionSkipHint: 'Only this chat window is affected.',
       },
       zh: {
         nav: '提问引导',
         title: '提问引导',
         intro:
-          '生成前如果需求宽泛，用最强的模型只问真正缺失的信息，再把回答整理成一张「任务说明」小单子（要做什么、最后给你什么、怎样算做好），确认后注入会话，让模型确切知道要做什么。不再做模型/推理路由。',
+          '生成前如果需求宽泛，用最强的模型只问真正缺失的信息，再把回答整理成一张「任务说明」小单子（要做什么、最后给你什么、怎样算做好），确认后放进当前聊天，让模型确切知道要做什么。不再做模型/推理路由。\n\n这里说的「聊天窗口」指一个会话，也就是侧边栏里的一条聊天；「消息」指你发的单条内容。',
         basics: '基础设置',
         enabledLabel: '启用生成前提问引导',
         trigger: '什么时候提问',
         triggerVague: '只在需求模糊时问',
-        triggerVagueDesc: '缺目标 / 交付物 / 限制时，先问清楚再生成（推荐）',
+        triggerVagueDesc: '每个聊天窗口的第一段工作内容里，缺目标 / 交付物 / 限制时先问清楚再生成（推荐）',
         triggerComplex: '复杂任务也问',
-        triggerComplexDesc: '任务看起来复杂时，即使目标清楚也先确认关键细节',
-        triggerAlways: '每个新会话都问',
-        triggerAlwaysDesc: '只在每个新会话的第一段工作内容上触发，寒暄不触发',
+        triggerComplexDesc: '每个聊天窗口的第一段工作内容里，任务看起来复杂时也先确认关键细节',
+        triggerAlways: '每个新窗口都问',
+        triggerAlwaysDesc: '只在每个聊天窗口的第一段工作内容上触发，纯寒暄不触发',
         triggerOff: '关闭',
         triggerOffDesc: '不主动提问，和原生行为一致',
-        triggerSessionSkip: '本会话跳过',
-        triggerSessionSkipDesc: '这个对话里不再引导；其他会话仍按各自设置',
+        triggerSessionSkip: '跳过这个窗口',
+        triggerSessionSkipDesc: '这个聊天窗口里不再引导；其他聊天窗口仍按各自设置',
         triggerOnce: '帮我一下',
-        triggerOnceDesc: '当前会话的下一条消息直接接管一次，用完自动恢复当前模式',
+        triggerOnceDesc: '当前聊天窗口里，你发的下一条消息直接接管一次，用完恢复原来的模式',
         stateVague: '模糊时',
         stateComplex: '复杂时',
         stateAlways: '每次',
@@ -159,9 +159,9 @@ window.__ModuleLoader__.load({
         stateOnce: '一次性',
         stateOff: '关',
         sectionBehavior: '追问行为',
-        triggerHint: '选择提问的主动程度；纯寒暄不会触发，等出现工作意图再问。',
+        triggerHint: '纯寒暄（比如「你好」）不会触发；等出现真正的工作意图后，再按这个设置判断。',
         foldAsk: '提问时机',
-        foldSession: '本会话',
+        foldSession: '本窗口',
         foldMore: '更多设置',
         foldBasic: '基础设置',
         foldBrain: '大脑模型（插件自身分析用）',
@@ -220,12 +220,12 @@ window.__ModuleLoader__.load({
         quickLabel: '提问引导',
         quickOn: '开',
         quickOff: '关闭',
-        quickSkip: '本会话跳过',
+        quickSkip: '本窗口跳过',
         quickTitle: '提问引导',
         quickHint: '完整设置：设置 → 提问引导',
-        sessionSection: '本会话设置',
-        sessionSkip: '本会话跳过目标引导',
-        sessionSkipHint: '只影响当前会话。',
+        sessionSection: '本窗口设置',
+        sessionSkip: '本窗口跳过目标引导',
+        sessionSkipHint: '只影响当前聊天窗口。',
       },
     }
 
@@ -652,66 +652,35 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** 提问时机选择：每个选项都带一句人话解释；「一次性接管」用金色区分，并和其他模式互斥。 */
-    function TriggerPicker({
-      t,
-      value,
-      disabled,
-      onChange,
-      compact,
-      sessionSkipped,
-      onSelectSession,
-      onceArmed,
-      onSelectOnce,
-    }) {
+    /** 提问时机选择：vague / complex 是常规模式；session / once 是会话级临时选项。 */
+    function TriggerPicker({ t, value, disabled, onChange, compact, selectedId, onSelect }) {
       const options = [
         { id: 'vague', label: t('triggerVague'), desc: t('triggerVagueDesc') },
         { id: 'complex', label: t('triggerComplex'), desc: t('triggerComplexDesc') },
-        { id: 'always', label: t('triggerAlways'), desc: t('triggerAlwaysDesc') },
       ]
-      if (typeof onSelectSession === 'function') {
-        options.push({ id: '__session_skip__', label: t('triggerSessionSkip'), desc: t('triggerSessionSkipDesc') })
-      }
-      if (typeof onSelectOnce === 'function') {
-        options.push({
-          id: '__once__',
-          label: t('triggerOnce'),
-          desc: t('triggerOnceDesc'),
-          accent: true,
-        })
+      if (typeof onSelect === 'function') {
+        options.push({ id: 'session', label: t('triggerSessionSkip'), desc: t('triggerSessionSkipDesc') })
+        options.push({ id: 'once', label: t('triggerOnce'), desc: t('triggerOnceDesc'), accent: true })
       }
       const onceAccent = 'var(--dsw-alias-state-warn-primary, #d4a13d)'
-      const armed = onceArmed === true
+      const current = selectedId ?? value
       return h(
         'div',
         { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
         options.map((option) => {
-          const sessionOption = option.id === '__session_skip__'
-          const onceOption = option.id === '__once__'
-          const active = onceOption
-            ? armed
-            : sessionOption
-              ? !armed && sessionSkipped === true
-              : !armed && sessionSkipped !== true && value === option.id
+          const active = current === option.id
           const accentColor = option.accent ? onceAccent : tokens.accent
           return h(
             'button',
             {
               key: option.id,
               type: 'button',
+              'aria-checked': active ? 'true' : 'false',
+              role: 'radio',
               disabled: disabled === true,
               onClick: () => {
-                if (onceOption) {
-                  if (typeof onSelectOnce === 'function') onSelectOnce(true)
-                  return
-                }
-                if (sessionOption) {
-                  if (typeof onSelectSession === 'function') onSelectSession(true)
-                  return
-                }
-                if (typeof onSelectOnce === 'function') onSelectOnce(false)
-                if (typeof onSelectSession === 'function') onSelectSession(false)
-                onChange(option.id)
+                if (typeof onSelect === 'function') onSelect(option.id)
+                else onChange(option.id)
               },
               style: {
                 display: 'flex',
@@ -760,7 +729,14 @@ window.__ModuleLoader__.load({
               { style: { display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 } },
               h(
                 'span',
-                { style: { fontSize: 13, fontWeight: active ? 500 : 400, lineHeight: '18px', color: option.accent ? onceAccent : tokens.text } },
+                {
+                  style: {
+                    fontSize: 13,
+                    fontWeight: active ? 500 : 400,
+                    lineHeight: '18px',
+                    color: option.accent ? onceAccent : tokens.text,
+                  },
+                },
                 option.label,
               ),
               compact === true
@@ -1173,6 +1149,7 @@ window.__ModuleLoader__.load({
       const { t, scope, sessionId } = props
       const [open, setOpen] = React.useState(false)
       const [sessionPrefs, setSessionPrefs] = React.useState(null)
+      const [selectedId, setSelectedId] = React.useState(null)
       // 面板用 fixed 定位，避开聊天区祖先容器的 overflow 裁切；窗口矮时自动向下弹并按剩余空间限高。
       const [popoverStyle, setPopoverStyle] = React.useState(null)
       const rootRef = React.useRef(null)
@@ -1298,21 +1275,39 @@ window.__ModuleLoader__.load({
           .then(() => scope.set(key, value))
           .catch(() => {})
       }
-      const writeSession = (key, value) => {
+      const writeSessionMany = (patch) => {
         if (!sessionId) return
-        const previous = sessionPrefs ?? { skipClarify: false }
-        const next = { ...previous, [key]: value }
-        setSessionPrefs(next)
+        setSessionPrefs((previous) => ({ ...(previous ?? { skipClarify: false, onceArmed: false }), ...patch }))
         fetch(API + '/session-prefs', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ sessionId, [key]: value }),
+          body: JSON.stringify({ sessionId, ...patch }),
         })
           .then((response) => (response.ok ? response.json() : undefined))
           .then((data) => {
             if (data?.prefs) setSessionPrefs(data.prefs)
           })
-          .catch(() => setSessionPrefs(previous))
+          .catch(() => {})
+      }
+
+      const triggerValue = trigger === 'complex' ? 'complex' : 'vague'
+      const currentSelection =
+        sessionPrefs?.onceArmed === true ? 'once' : sessionPrefs?.skipClarify === true ? 'session' : triggerValue
+      React.useEffect(() => {
+        if (selectedId !== null && selectedId === currentSelection) setSelectedId(null)
+      }, [selectedId, currentSelection])
+      const handleTriggerSelect = (id) => {
+        setSelectedId(id)
+        if (id === 'once') {
+          writeSessionMany({ onceArmed: true, skipClarify: false })
+          return
+        }
+        if (id === 'session') {
+          writeSessionMany({ onceArmed: false, skipClarify: true })
+          return
+        }
+        writeSessionMany({ onceArmed: false, skipClarify: false })
+        write('triggerMode', id)
       }
 
       // 弹层优先挂到 body（createPortal），这样任何祖先容器的 overflow / transform 都裁不到它。
@@ -1465,13 +1460,10 @@ window.__ModuleLoader__.load({
               h('div', { style: { fontSize: 12, color: tokens.secondary, marginTop: 2 } }, t('foldAsk')),
               h(TriggerPicker, {
                 t,
-                value: trigger === 'off' || trigger === 'always' || trigger === 'complex' ? trigger : 'vague',
+                value: triggerValue,
                 disabled: !writable,
-                sessionSkipped: skipped,
-                onSelectSession: (next) => writeSession('skipClarify', next),
-                onceArmed: sessionPrefs?.onceArmed === true,
-                onSelectOnce: (next) => writeSession('onceArmed', next),
-                onChange: (next) => write('triggerMode', next),
+                selectedId: selectedId ?? currentSelection,
+                onSelect: handleTriggerSelect,
               }),
               h('div', { style: { fontSize: 11, lineHeight: '16px', color: tokens.caption } }, t('triggerHint')),              h('div', { style: { fontSize: 12, color: tokens.secondary, marginTop: 2 } }, t('sectionBehavior')),
               h(Row, {
@@ -1689,7 +1681,7 @@ window.__ModuleLoader__.load({
             h('div', { style: styles.label }, t('trigger')),
             h(TriggerPicker, {
               t,
-              value: trigger === 'off' || trigger === 'always' || trigger === 'complex' ? trigger : 'vague',
+              value: trigger === 'complex' ? 'complex' : 'vague',
               disabled,
               onChange: (next) => write('triggerMode', next),
             }),
