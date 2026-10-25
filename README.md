@@ -19,7 +19,7 @@
 > 在 DSH 的插件安装输入框里填：
 >
 > ```
-> dsh-help-me-to-ask@1.0.3
+> dsh-help-me-to-ask@1.0.4
 > ```
 >
 > 带版本号可以跳过 npm 新版本的 24 小时观察期；只写包名时，DSH 可能先给你装稍旧的 1.0.2。
@@ -85,7 +85,7 @@ dsh plugin add dsh-help-me-to-ask
 **想直接装最新版**：在插件安装输入框里带版本号：
 
 ```
-dsh-help-me-to-ask@1.0.3
+dsh-help-me-to-ask@1.0.4
 ```
 
 这是因为 pnpm 默认会给新发布的版本一个 24 小时观察期；带准确版本号可以越过它。或者下载 release 里的 tgz 用本地安装。装好之后重启 DSH（或刷新页面），输入框左边就能看到它了。
@@ -127,7 +127,7 @@ That’s all it does. Before answering, it helps you state your request clearly,
 > In the DSH plugin install field, enter:
 >
 > ```
-> dsh-help-me-to-ask@1.0.3
+> dsh-help-me-to-ask@1.0.4
 > ```
 >
 > Pinning the exact version skips pnpm’s 24-hour release-age gate. With the bare package name, DSH may install the slightly older 1.0.2 first.
@@ -193,7 +193,7 @@ dsh plugin add dsh-help-me-to-ask
 **To install the newest version directly**, pin the version in the install field:
 
 ```
-dsh-help-me-to-ask@1.0.3
+dsh-help-me-to-ask@1.0.4
 ```
 
 pnpm gives freshly published versions a 24-hour observation window by default; pinning the exact version bypasses it. You can also download the tgz from a release and install locally. Restart DSH (or refresh the page) and the switch will appear next to the input box.

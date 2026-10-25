@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 const ROUTE_PREFIX = '/dsh-help-me-to-ask'
-const VERSION = '1.0.3'
+const VERSION = '1.0.4'
 
 const DRIFT_SIGNAL_RE = /(换个|改成|改为|换方向|重新来|不是这个|不对|先停|算了|改主意|调整目标|另一个需求|重新做)/
 
