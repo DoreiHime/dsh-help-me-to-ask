@@ -10,6 +10,13 @@ window.__ModuleLoader__.load({
   id: 'dsh-help-me-to-ask',
   factory(require) {
     const React = require('react')
+    // 尽量把弹层渲染到 body，绕开聊天区容器的 overflow/transform 裁切；拿不到 react-dom 时退回原地渲染。
+    let ReactDOM
+    try {
+      ReactDOM = require('react-dom')
+    } catch {
+      ReactDOM = undefined
+    }
     const h = React.createElement
     const NS = 'dsh-help-me-to-ask'
     const ROW_ID = 'dsh-help-me-to-ask'
@@ -39,19 +46,22 @@ window.__ModuleLoader__.load({
         triggerVagueDesc: 'Ask first when goal / deliverable / constraints are missing (recommended).',
         triggerComplex: 'Also for complex tasks',
         triggerComplexDesc: 'Even a clear goal gets a quick detail check when the task looks complex.',
-        triggerAlways: 'Every new conversation',
-        triggerAlwaysDesc: 'Show a goal-check card at the start of every new conversation.',
+        triggerAlways: 'Every new session',
+        triggerAlwaysDesc: 'Only on the first real work message of each session; greetings are ignored.',
         triggerOff: 'Off',
         triggerOffDesc: 'Never ask; behave like the native app.',
         triggerSessionSkip: 'Skip in this conversation',
         triggerSessionSkipDesc: 'No clarification here; other conversations keep their setting.',
+        triggerOnce: 'Help me out once',
+        triggerOnceDesc: 'Take over the next message in this conversation once, then return to the current mode automatically.',
         stateVague: 'Vague',
         stateComplex: 'Complex',
         stateAlways: 'Every chat',
         stateSkipped: 'Skipped here',
+        stateOnce: 'Once',
         stateOff: 'Off',
         sectionBehavior: 'Follow-up behavior',
-        triggerHint: 'Pick how proactive the clarification should be. Start with the first option.',
+        triggerHint: 'Pick how proactive the clarification should be. Pure greetings are ignored; the plugin waits for real work intent.',
         foldAsk: 'When to ask',
         foldSession: 'This conversation',
         foldMore: 'More settings',
@@ -91,6 +101,7 @@ window.__ModuleLoader__.load({
         constraintsLabel: 'Scope / constraints (multi)',
         acceptanceLabel: 'Acceptance criteria (multi)',
         contextLabel: 'Your notes',
+        yesNoLabel: 'A few quick questions',
         contextPlaceholder: 'Anything else the model should know…',
         customGoalPlaceholder: 'Or type your goal directly…',
         autoBrief: 'One-click brief',
@@ -133,19 +144,22 @@ window.__ModuleLoader__.load({
         triggerVagueDesc: '缺目标 / 交付物 / 限制时，先问清楚再生成（推荐）',
         triggerComplex: '复杂任务也问',
         triggerComplexDesc: '任务看起来复杂时，即使目标清楚也先确认关键细节',
-        triggerAlways: '每个新对话都问',
-        triggerAlwaysDesc: '每次新建对话都先弹一张目标确认卡',
+        triggerAlways: '每个新会话都问',
+        triggerAlwaysDesc: '只在每个新会话的第一段工作内容上触发，寒暄不触发',
         triggerOff: '关闭',
         triggerOffDesc: '不主动提问，和原生行为一致',
         triggerSessionSkip: '本会话跳过',
         triggerSessionSkipDesc: '这个对话里不再引导；其他会话仍按各自设置',
+        triggerOnce: '帮我一下',
+        triggerOnceDesc: '当前会话的下一条消息直接接管一次，用完自动恢复当前模式',
         stateVague: '模糊时',
         stateComplex: '复杂时',
         stateAlways: '每次',
         stateSkipped: '跳过',
+        stateOnce: '一次性',
         stateOff: '关',
         sectionBehavior: '追问行为',
-        triggerHint: '选择提问的主动程度；不确定就用第一项。',
+        triggerHint: '选择提问的主动程度；纯寒暄不会触发，等出现工作意图再问。',
         foldAsk: '提问时机',
         foldSession: '本会话',
         foldMore: '更多设置',
@@ -184,6 +198,7 @@ window.__ModuleLoader__.load({
         constraintsLabel: '范围 / 限制（多选）',
         acceptanceLabel: '验收标准（多选）',
         contextLabel: '个人想法',
+        yesNoLabel: '还有几个问题',
         contextPlaceholder: '还有什么模型应该知道的，写在这里…',
         customGoalPlaceholder: '或者直接写你的目标…',
         autoBrief: '一键明确目标',
@@ -277,11 +292,44 @@ window.__ModuleLoader__.load({
       return luminance > 0.62 ? '#111111' : '#ffffff'
     }
 
+    /**
+     * 桌面端标题栏（菜单 + 最小化/全屏/关闭按钮）会盖住 fixed 弹层。
+     * 通过 Electron 拖拽区（-webkit-app-region: drag）测量它占的高度；量不到就退回一个保守值。
+     */
+    function measureTitlebarBottom() {
+      let bottom = 0
+      try {
+        const viewportWidth = document.documentElement?.clientWidth ?? window.innerWidth
+        const nodes = document.querySelectorAll('body *')
+        for (let index = 0; index < nodes.length; index += 1) {
+          const node = nodes[index]
+          const rect = node.getBoundingClientRect()
+          if (rect.bottom <= 0 || rect.top > 120) continue
+          if (rect.width < viewportWidth * 0.55) continue
+          const style = window.getComputedStyle(node)
+          const region = (
+            style.getPropertyValue('-webkit-app-region') ||
+            style.getPropertyValue('app-region') ||
+            ''
+          ).trim()
+          const isHeader = node.tagName === 'HEADER'
+          const topBarLike = rect.top <= 8 && rect.bottom < 160 && rect.width >= viewportWidth * 0.55
+          if (region === 'drag' || region === 'no-drag' || isHeader || topBarLike) {
+            bottom = Math.max(bottom, rect.bottom)
+          }
+        }
+      } catch {}
+      if (bottom > 0) return bottom
+      // 桌面端常见标题栏高度；宁可比实际高一点，也不要被窗口按钮盖住。
+      return typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent) ? 64 : 0
+    }
+
     const STYLE = [
       '.dshpf-chip{transition:background .12s ease,border-color .12s ease}',
       '.dshpf-chip:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.12))}',
       '.dshpf-pop{animation:dshpf-pop-in .14s ease both}',
       '@keyframes dshpf-pop-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}',
+      '@media (max-width: 620px){.dshpf-card{padding:12px 12px !important;gap:10px !important}}',
     ].join('\n')
 
     const styles = {
@@ -604,8 +652,18 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** 提问时机选择：每个选项都带一句人话解释，避免"宽泛/复杂"靠猜。 */
-    function TriggerPicker({ t, value, disabled, onChange, compact, sessionSkipped, onSelectSession }) {
+    /** 提问时机选择：每个选项都带一句人话解释；「一次性接管」用金色区分，并和其他模式互斥。 */
+    function TriggerPicker({
+      t,
+      value,
+      disabled,
+      onChange,
+      compact,
+      sessionSkipped,
+      onSelectSession,
+      onceArmed,
+      onSelectOnce,
+    }) {
       const options = [
         { id: 'vague', label: t('triggerVague'), desc: t('triggerVagueDesc') },
         { id: 'complex', label: t('triggerComplex'), desc: t('triggerComplexDesc') },
@@ -614,12 +672,28 @@ window.__ModuleLoader__.load({
       if (typeof onSelectSession === 'function') {
         options.push({ id: '__session_skip__', label: t('triggerSessionSkip'), desc: t('triggerSessionSkipDesc') })
       }
+      if (typeof onSelectOnce === 'function') {
+        options.push({
+          id: '__once__',
+          label: t('triggerOnce'),
+          desc: t('triggerOnceDesc'),
+          accent: true,
+        })
+      }
+      const onceAccent = 'var(--dsw-alias-state-warn-primary, #d4a13d)'
+      const armed = onceArmed === true
       return h(
         'div',
         { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
         options.map((option) => {
           const sessionOption = option.id === '__session_skip__'
-          const active = sessionOption ? sessionSkipped === true : sessionSkipped !== true && value === option.id
+          const onceOption = option.id === '__once__'
+          const active = onceOption
+            ? armed
+            : sessionOption
+              ? !armed && sessionSkipped === true
+              : !armed && sessionSkipped !== true && value === option.id
+          const accentColor = option.accent ? onceAccent : tokens.accent
           return h(
             'button',
             {
@@ -627,10 +701,15 @@ window.__ModuleLoader__.load({
               type: 'button',
               disabled: disabled === true,
               onClick: () => {
+                if (onceOption) {
+                  if (typeof onSelectOnce === 'function') onSelectOnce(true)
+                  return
+                }
                 if (sessionOption) {
                   if (typeof onSelectSession === 'function') onSelectSession(true)
                   return
                 }
+                if (typeof onSelectOnce === 'function') onSelectOnce(false)
                 if (typeof onSelectSession === 'function') onSelectSession(false)
                 onChange(option.id)
               },
@@ -641,8 +720,18 @@ window.__ModuleLoader__.load({
                 textAlign: 'left',
                 padding: '7px 9px',
                 borderRadius: tokens.radiusMd,
-                border: '0.5px solid ' + (active ? tokens.accent : tokens.border),
-                background: active ? tokens.hover : 'transparent',
+                border:
+                  '0.5px solid ' +
+                  (active
+                    ? accentColor
+                    : option.accent
+                      ? 'color-mix(in srgb, ' + onceAccent + ' 45%, ' + tokens.border + ')'
+                      : tokens.border),
+                background: active
+                  ? option.accent
+                    ? 'color-mix(in srgb, ' + onceAccent + ' 14%, transparent)'
+                    : tokens.hover
+                  : 'transparent',
                 color: tokens.text,
                 font: 'inherit',
                 cursor: disabled === true ? 'default' : 'pointer',
@@ -656,7 +745,7 @@ window.__ModuleLoader__.load({
                   width: 14,
                   height: 14,
                   borderRadius: '50%',
-                  border: '1.5px solid ' + (active ? tokens.accent : tokens.borderStrong),
+                  border: '1.5px solid ' + (active ? accentColor : tokens.borderStrong),
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -664,12 +753,16 @@ window.__ModuleLoader__.load({
                   marginTop: 2,
                 },
               },
-              active ? h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: tokens.accent } }) : null,
+              active ? h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: accentColor } }) : null,
             ),
             h(
               'span',
               { style: { display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 } },
-              h('span', { style: { fontSize: 13, fontWeight: active ? 500 : 400, lineHeight: '18px' } }, option.label),
+              h(
+                'span',
+                { style: { fontSize: 13, fontWeight: active ? 500 : 400, lineHeight: '18px', color: option.accent ? onceAccent : tokens.text } },
+                option.label,
+              ),
               compact === true
                 ? null
                 : h('span', { style: { fontSize: 11, lineHeight: '16px', color: tokens.caption } }, option.desc),
@@ -682,7 +775,7 @@ window.__ModuleLoader__.load({
     /* ---------------- 澄清卡 / 简报卡 ---------------- */
 
     function PendingCard(props) {
-      const { sessionId, t, scope } = props
+      const { sessionId, t } = props
       const [pending, setPending] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
       const [goal, setGoal] = React.useState('')
@@ -739,6 +832,141 @@ window.__ModuleLoader__.load({
 
       if (!pending) return null
 
+      // 外观对齐 DSH 原生问答卡：卡片自带标题、描述、选项行与底部操作。
+      const PLUGIN_EYEBROW = '提问引导 · dsh-HelpMe-To-Ask'
+      const cardStyle = {
+        width: '100%',
+        maxWidth: 'var(--dsh-chat-content-width, 760px)',
+        margin: '0 auto',
+        alignSelf: 'center',
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        maxHeight: 'min(60vh, 520px)',
+        borderRadius: 'var(--dsw-radius-xl, 16px)',
+        background: 'var(--dsw-specific-input-major, ' + tokens.cardFill + ')',
+        boxShadow: 'var(--dsw-elevation-panel, 0 10px 30px rgba(0,0,0,.28))',
+        border: '0.5px solid ' + tokens.cardStroke,
+        color: 'var(--dsw-alias-label-primary, ' + tokens.text + ')',
+      }
+      const headerStyle = {
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: 16,
+        padding: '18px 16px 0 22px',
+      }
+      const eyebrowStyle = {
+        fontSize: 11,
+        lineHeight: '16px',
+        color: 'var(--dsw-alias-label-tertiary, ' + tokens.caption + ')',
+        letterSpacing: '.01em',
+        marginBottom: 5,
+      }
+      const titleStyle = { margin: 0, fontSize: 16, fontWeight: 500, lineHeight: '22px' }
+      const descStyle = {
+        margin: '6px 0 0',
+        fontSize: 13,
+        lineHeight: '20px',
+        color: 'var(--dsw-alias-label-tertiary, ' + tokens.caption + ')',
+      }
+      const bodyStyle = {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+        minHeight: 0,
+        overflowY: 'auto',
+        overscrollBehavior: 'contain',
+        padding: '12px 22px 6px',
+      }
+      const footerStyle = {
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '12px 16px 12px 22px',
+        borderTop: '0.5px solid ' + tokens.border,
+      }
+      const sectionTitleStyle = { fontSize: 14, fontWeight: 500, lineHeight: '22px' }
+      const optionStyle = (active) => ({
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 8,
+        width: '100%',
+        minHeight: 38,
+        padding: '8px 12px 8px 8px',
+        borderRadius: 'var(--dsw-radius-md, 8px)',
+        border: '1px solid ' + (active ? tokens.borderStrong : 'transparent'),
+        background: active ? tokens.hover : 'transparent',
+        color: tokens.text,
+        font: 'inherit',
+        textAlign: 'left',
+        cursor: 'pointer',
+        transition: 'background .12s ease, border-color .12s ease',
+        flexShrink: 0,
+        boxSizing: 'border-box',
+      })
+      const indicatorStyle = (active, multi) => ({
+        width: 18,
+        height: 18,
+        borderRadius: multi ? 'var(--dsw-radius-xs, 5px)' : '50%',
+        border: '1.5px solid ' + (active ? tokens.accent : tokens.borderStrong),
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        marginTop: 2,
+      })
+      const checkStyle = (active, multi) => ({
+        width: multi ? 8 : 7,
+        height: multi ? 8 : 7,
+        borderRadius: multi ? 2 : '50%',
+        background: active ? tokens.accent : 'transparent',
+        display: 'inline-block',
+      })
+      const optionRow = (label, active, multi, onClick) =>
+        h(
+          'button',
+          { key: label, type: 'button', onClick, style: optionStyle(active) },
+          h('span', { style: indicatorStyle(active, multi) }, active ? h('span', { style: checkStyle(active, multi) }) : null),
+          h(
+            'span',
+            { style: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: '22px', fontWeight: active ? 500 : 400 } },
+            label,
+          ),
+        )
+      const section = (label, children) =>
+        h(
+          'section',
+          { key: label, style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+          h('div', { style: sectionTitleStyle }, label),
+          h('div', { style: { display: 'flex', flexDirection: 'column', gap: 1 } }, children),
+        )
+      const header = (title, extra) =>
+        h(
+          'div',
+          { style: headerStyle },
+          h(
+            'div',
+            { style: { minWidth: 0 } },
+            h('div', { style: eyebrowStyle }, PLUGIN_EYEBROW),
+            h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' } }, h('h2', { style: titleStyle }, title), extra ?? null),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              style: { ...buttonStyle('tertiary'), flexShrink: 0 },
+              disabled: busy,
+              onClick: () => decide(pending.kind === 'brief' ? { action: 'keep' } : { value: { skip: true } }),
+            },
+            t('skip'),
+          ),
+        )
+
       if (pending.kind === 'brief') {
         const brief = pending.brief ?? {}
         const rows = [
@@ -751,44 +979,34 @@ window.__ModuleLoader__.load({
         ].filter(([, value]) => typeof value === 'string' && value.trim() !== '')
         return h(
           'div',
-          { className: 'dshpf-pop', style: { ...styles.card, padding: '12px 14px', gap: 8 } },
+          { className: 'dshpf-pop', style: cardStyle },
           h('style', null, STYLE),
-          h(
-            'div',
-            { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
-            h('span', {
-              style: { width: 7, height: 7, borderRadius: '50%', background: tokens.accent, display: 'inline-block' },
-            }),
-            h('span', { style: { fontSize: 13, fontWeight: 500 } }, t('briefTitle')),
-            pending.mode === 'drift'
-              ? h('span', { style: { fontSize: 12, color: tokens.caption } }, '· ' + t('briefSummary') + '更新')
-              : null,
-            typeof pending.round === 'number'
-              ? h('span', { style: { fontSize: 12, color: tokens.caption } }, '· ' + t('roundTag') + ' ' + (pending.round + 1))
-              : null,
-            brief.summary
-              ? h('span', { style: { fontSize: 12, color: tokens.caption } }, '· ' + brief.summary)
-              : null,
+          header(
+            pending.mode === 'drift' ? t('briefTitle') + ' · ' + t('briefSummary') : t('briefTitle'),
+            typeof pending.round === 'number' ? h('span', { style: { fontSize: 12, color: tokens.caption } }, t('roundTag') + ' ' + (pending.round + 1)) : null,
           ),
           h(
             'div',
-            { style: { fontSize: 12, lineHeight: '18px', color: tokens.caption } },
-            t('briefIntro'),
-          ),
-          ...rows.map(([label, value]) =>
+            { style: bodyStyle },
+            h('p', { style: { ...descStyle, margin: 0 } }, pending.mode === 'drift' ? t('briefIntro') : brief.summary || t('briefIntro')),
             h(
               'div',
-              { key: label, style: { display: 'flex', gap: 8, alignItems: 'flex-start' } },
-              h('span', { style: { fontSize: 12, color: tokens.caption, minWidth: 62, flexShrink: 0, lineHeight: '20px' } }, label),
-              h('span', { style: { fontSize: 13, lineHeight: '20px', color: tokens.text } }, value),
+              { style: { display: 'flex', flexDirection: 'column', gap: 1, border: '0.5px solid ' + tokens.border, borderRadius: 'var(--dsw-radius-lg, 12px)', background: 'var(--dsw-alias-bg-module-platform, transparent)', padding: 4 } },
+              ...rows.map(([label, value]) =>
+                h(
+                  'div',
+                  { key: label, style: { display: 'flex', flexDirection: 'column', gap: 1, padding: '7px 10px' } },
+                  h('span', { style: { fontSize: 12, lineHeight: '16px', color: tokens.caption } }, label),
+                  h('span', { style: { fontSize: 14, lineHeight: '22px', color: tokens.text } }, value),
+                ),
+              ),
             ),
           ),
           h(
             'div',
-            { style: { display: 'flex', gap: 8, marginTop: 2 } },
-            h('button', { type: 'button', style: { ...buttonStyle('primary'), marginLeft: 'auto' }, disabled: busy, onClick: () => decide({ action: 'apply' }) }, t('confirmStart')),
+            { style: footerStyle },
             h('button', { type: 'button', style: buttonStyle('secondary'), disabled: busy, onClick: () => decide({ action: 'edit' }) }, t('editBrief')),
-            h('button', { type: 'button', style: buttonStyle('tertiary'), disabled: busy, onClick: () => decide({ action: 'keep' }) }, t('skip')),
+            h('button', { type: 'button', style: buttonStyle('primary'), disabled: busy, onClick: () => decide({ action: 'apply' }) }, t('confirmStart')),
           ),
         )
       }
@@ -798,103 +1016,127 @@ window.__ModuleLoader__.load({
       const toggleIn = (list, setList, item) => {
         setList(list.includes(item) ? list.filter((x) => x !== item) : [...list, item])
       }
-      const section = (label, options, selected, onSelect, multi) =>
-        options.length === 0
-          ? null
-          : h(
-              'div',
-              { key: label, style: { display: 'flex', flexDirection: 'column', gap: 6 } },
-              h('div', { style: { fontSize: 12, color: tokens.secondary } }, label),
-              h(
-                'div',
-                { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
-                options.map((item) =>
-                  h(Chip, {
-                    key: item,
-                    label: item,
-                    active: multi ? selected.includes(item) : selected === item,
-                    onClick: () => onSelect(item),
-                  }),
-                ),
-              ),
-            )
+      const goalRows = (analysis.goalOptions ?? []).map((item) =>
+        optionRow(item, goal === item, false, () => setGoal(goal === item ? '' : item)),
+      )
+      const deliverableRows = (analysis.deliverableOptions ?? []).map((item) =>
+        optionRow(item, deliverable === item, false, () => setDeliverable(deliverable === item ? '' : item)),
+      )
+      const constraintRows = (analysis.constraintOptions ?? []).map((item) =>
+        optionRow(item, constraints.includes(item), true, () => toggleIn(constraints, setConstraints, item)),
+      )
+      const acceptanceRows = (analysis.acceptanceOptions ?? []).map((item) =>
+        optionRow(item, acceptance.includes(item), true, () => toggleIn(acceptance, setAcceptance, item)),
+      )
+      const yesNoRows = (analysis.yesNo ?? []).map((item) =>
+        h(
+          'div',
+          { key: item.id, style: { ...optionStyle(false), cursor: 'default' } },
+          h(
+            'span',
+            { style: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: '22px' } },
+            item.question,
+          ),
+          h(Toggle, {
+            checked: yesNo[item.id] === undefined ? item.default !== false : yesNo[item.id] === true,
+            onChange: (next) => setYesNo({ ...yesNo, [item.id]: next }),
+          }),
+        ),
+      )
+
       return h(
         'div',
-        { className: 'dshpf-pop', style: { ...styles.card, padding: '12px 14px', gap: 10 } },
+        { className: 'dshpf-pop', style: cardStyle },
         h('style', null, STYLE),
+        header(
+          t('clarifyTitle'),
+          typeof pending.round === 'number' ? h('span', { style: { fontSize: 12, color: tokens.caption } }, t('roundTag') + ' ' + (pending.round + 1)) : null,
+        ),
         h(
           'div',
-          { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
-          h('span', {
-            style: { width: 7, height: 7, borderRadius: '50%', background: tokens.accent, display: 'inline-block' },
-          }),
-          h('span', { style: { fontSize: 13, fontWeight: 500 } }, t('clarifyTitle')),
-          typeof pending.round === 'number'
-            ? h('span', { style: { fontSize: 12, color: tokens.caption } }, '· ' + t('roundTag') + ' ' + (pending.round + 1))
+          { style: bodyStyle },
+          analysis.understanding
+            ? h(
+                'p',
+                { style: { ...descStyle, margin: 0 } },
+                h('span', { style: { color: tokens.caption } }, t('understood') + '：'),
+                h('span', { style: { color: tokens.text } }, analysis.understanding),
+              )
+            : null,
+          goalRows.length ? section(t('goalLabel'), goalRows) : null,
+          h(
+            'div',
+            { style: { ...optionStyle(false), cursor: 'text' } },
+            h('span', { style: indicatorStyle(false, false) }),
+            h('input', {
+              type: 'text',
+              value: custom,
+              placeholder: t('customGoalPlaceholder'),
+              style: {
+                flex: 1,
+                minWidth: 0,
+                border: 'none',
+                outline: 'none',
+                background: 'transparent',
+                color: tokens.text,
+                font: 'inherit',
+                fontSize: 14,
+                lineHeight: '22px',
+                padding: 0,
+              },
+              onChange: (event) => {
+                setCustom(event.target.value)
+                if (event.target.value.trim() !== '') setGoal('')
+              },
+            }),
+          ),
+          deliverableRows.length ? section(t('deliverableLabel'), deliverableRows) : null,
+          constraintRows.length ? section(t('constraintsLabel'), constraintRows) : null,
+          acceptanceRows.length ? section(t('acceptanceLabel'), acceptanceRows) : null,
+          yesNoRows.length
+            ? h(
+                'section',
+                { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+                h('div', { style: sectionTitleStyle }, t('yesNoLabel')),
+                h('div', { style: { display: 'flex', flexDirection: 'column', gap: 1 } }, yesNoRows),
+              )
             : null,
           h(
-            'button',
-            { type: 'button', style: { ...buttonStyle('tertiary'), marginLeft: 'auto' }, disabled: busy, onClick: () => decide({ value: { skip: true } }) },
-            t('skip'),
+            'div',
+            { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+            h('div', { style: sectionTitleStyle }, t('contextLabel')),
+            h('textarea', {
+              value: custom,
+              rows: 2,
+              placeholder: t('contextPlaceholder'),
+              style: {
+                boxSizing: 'border-box',
+                width: '100%',
+                minHeight: 64,
+                padding: '8px 12px',
+                borderRadius: 'var(--dsw-radius-lg, 12px)',
+                border: '0.5px solid ' + tokens.borderStrong,
+                background: 'var(--dsw-alias-bg-module-platform, transparent)',
+                color: tokens.text,
+                font: 'inherit',
+                fontSize: 14,
+                lineHeight: '22px',
+                resize: 'vertical',
+                outline: 'none',
+              },
+              onChange: (event) => setCustom(event.target.value),
+            }),
           ),
-        ),
-        analysis.understanding
-          ? h(
-              'div',
-              { style: { fontSize: 13, lineHeight: '20px' } },
-              h('span', { style: { color: tokens.caption } }, t('understood') + '：'),
-              h('span', { style: { color: tokens.text } }, analysis.understanding),
-            )
-          : null,
-        section(t('goalLabel'), analysis.goalOptions ?? [], goal, (item) => setGoal(goal === item ? '' : item), false),
-        h('input', {
-          type: 'text',
-          value: custom,
-          placeholder: t('customGoalPlaceholder'),
-          style: { ...styles.input, width: '100%' },
-          onChange: (event) => {
-            setCustom(event.target.value)
-            if (event.target.value.trim() !== '') setGoal('')
-          },
-        }),
-        section(t('deliverableLabel'), analysis.deliverableOptions ?? [], deliverable, (item) => setDeliverable(deliverable === item ? '' : item), false),
-        section(t('constraintsLabel'), analysis.constraintOptions ?? [], constraints, (item) => toggleIn(constraints, setConstraints, item), true),
-        section(t('acceptanceLabel'), analysis.acceptanceOptions ?? [], acceptance, (item) => toggleIn(acceptance, setAcceptance, item), true),
-        (analysis.yesNo ?? []).length
-          ? h(
-              'div',
-              { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
-              (analysis.yesNo ?? []).map((item) =>
-                h(Row, {
-                  key: item.id,
-                  label: item.question,
-                  children: h(Toggle, {
-                    checked: yesNo[item.id] === undefined ? item.default !== false : yesNo[item.id] === true,
-                    onChange: (next) => setYesNo({ ...yesNo, [item.id]: next }),
-                  }),
-                }),
-              ),
-            )
-          : null,
-        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
-          h('div', { style: { fontSize: 12, color: tokens.secondary } }, t('contextLabel')),
-          h('textarea', {
-            value: custom,
-            rows: 2,
-            placeholder: t('contextPlaceholder'),
-            style: { ...styles.input, width: '100%', height: 'auto', minHeight: 52, padding: '8px 10px', lineHeight: '20px', resize: 'vertical' },
-            onChange: (event) => setCustom(event.target.value),
-          }),
         ),
         h(
           'div',
-          { style: { display: 'flex', gap: 8, marginTop: 2, flexWrap: 'wrap' } },
+          { style: footerStyle },
           h('button', { type: 'button', style: buttonStyle('secondary'), disabled: busy, onClick: () => decide({ value: { autoBrief: true } }) }, t('autoBrief')),
           h(
             'button',
             {
               type: 'button',
-              style: { ...buttonStyle('primary'), marginLeft: 'auto' },
+              style: buttonStyle('primary'),
               disabled: busy,
               onClick: () =>
                 decide({
@@ -931,7 +1173,10 @@ window.__ModuleLoader__.load({
       const { t, scope, sessionId } = props
       const [open, setOpen] = React.useState(false)
       const [sessionPrefs, setSessionPrefs] = React.useState(null)
+      // 面板用 fixed 定位，避开聊天区祖先容器的 overflow 裁切；窗口矮时自动向下弹并按剩余空间限高。
+      const [popoverStyle, setPopoverStyle] = React.useState(null)
       const rootRef = React.useRef(null)
+      const popoverRef = React.useRef(null)
       const { snapshot, valueOf } = useScopeValues(scope)
       const enabled = valueOf('enabled') === true
       const trigger = valueOf('triggerMode')
@@ -940,21 +1185,30 @@ window.__ModuleLoader__.load({
       // 聊天框里的状态简写：直接显示当前提问时机，而不是笼统的"开"
       const stateText = !enabled
         ? t('stateOff')
-        : skipped
-          ? t('stateSkipped')
-          : trigger === 'off'
-            ? t('stateOff')
-            : trigger === 'always'
-              ? t('stateAlways')
-              : trigger === 'complex'
-                ? t('stateComplex')
-                : t('stateVague')
+        : sessionPrefs?.onceArmed === true
+          ? t('stateOnce')
+          : skipped
+            ? t('stateSkipped')
+            : trigger === 'off'
+              ? t('stateOff')
+              : trigger === 'always'
+                ? t('stateAlways')
+                : trigger === 'complex'
+                  ? t('stateComplex')
+                  : t('stateVague')
 
       React.useEffect(() => {
         if (!open) return undefined
         const onDown = (event) => {
           const root = rootRef.current
-          if (root && event.target instanceof Node && !root.contains(event.target)) setOpen(false)
+          if (
+            root &&
+            event.target instanceof Node &&
+            !root.contains(event.target) &&
+            !(popoverRef.current && popoverRef.current.contains(event.target))
+          ) {
+            setOpen(false)
+          }
         }
         const onKey = (event) => {
           if (event.key === 'Escape') setOpen(false)
@@ -968,16 +1222,73 @@ window.__ModuleLoader__.load({
       }, [open])
 
       React.useEffect(() => {
+        if (!open) return undefined
+        const layoutPopover = () => {
+          const root = rootRef.current
+          if (!root) return
+          const rect = root.getBoundingClientRect()
+          const margin = 16
+          const titlebarBottom = measureTitlebarBottom()
+          // 顶部不能进标题栏（窗口按钮会盖住），左右和底部都留出边距。
+          const safeTop = Math.max(margin, titlebarBottom + 8)
+          const viewportWidth = document.documentElement?.clientWidth ?? window.innerWidth
+          const viewportHeight = window.innerHeight
+          const width = Math.max(180, Math.min(360, viewportWidth - margin * 2))
+          const left = Math.max(margin, Math.min(rect.left, viewportWidth - width - margin))
+          const spaceAbove = Math.max(0, rect.top - safeTop - 8)
+          const spaceBelow = Math.max(0, viewportHeight - rect.bottom - margin - 8)
+          const placeUp = spaceAbove >= 380 || spaceAbove >= spaceBelow
+          const available = placeUp ? spaceAbove : spaceBelow
+          const maxHeight = Math.min(560, Math.max(120, available))
+          const top = placeUp
+            ? Math.max(safeTop, rect.top - 8 - maxHeight)
+            : Math.min(rect.bottom + 8, viewportHeight - margin - Math.min(maxHeight, 160))
+          setPopoverStyle((previous) => {
+            if (
+              previous &&
+              previous.position === 'fixed' &&
+              previous.left === left &&
+              previous.top === top &&
+              previous.width === width &&
+              previous.maxHeight === maxHeight
+            ) {
+              return previous
+            }
+            return { position: 'fixed', left, top, width, maxHeight }
+          })
+        }
+        layoutPopover()
+        let frame = 0
+        const scheduleLayout = () => {
+          if (frame !== 0) return
+          frame = window.requestAnimationFrame(() => {
+            frame = 0
+            layoutPopover()
+          })
+        }
+        window.addEventListener('resize', scheduleLayout)
+        return () => {
+          if (frame !== 0) window.cancelAnimationFrame(frame)
+          window.removeEventListener('resize', scheduleLayout)
+        }
+      }, [open])
+
+      React.useEffect(() => {
         if (!sessionId) return undefined
         let alive = true
-        fetch(API + '/session-prefs?sessionId=' + encodeURIComponent(sessionId), { cache: 'no-store' })
-          .then((response) => (response.ok ? response.json() : undefined))
-          .then((data) => {
-            if (alive && data?.prefs) setSessionPrefs(data.prefs)
-          })
-          .catch(() => {})
+        const load = () => {
+          fetch(API + '/session-prefs?sessionId=' + encodeURIComponent(sessionId), { cache: 'no-store' })
+            .then((response) => (response.ok ? response.json() : undefined))
+            .then((data) => {
+              if (alive && data?.prefs) setSessionPrefs(data.prefs)
+            })
+            .catch(() => {})
+        }
+        load()
+        const timer = setInterval(load, 2500)
         return () => {
           alive = false
+          clearInterval(timer)
         }
       }, [sessionId])
 
@@ -1002,6 +1313,22 @@ window.__ModuleLoader__.load({
             if (data?.prefs) setSessionPrefs(data.prefs)
           })
           .catch(() => setSessionPrefs(previous))
+      }
+
+      // 弹层优先挂到 body（createPortal），这样任何祖先容器的 overflow / transform 都裁不到它。
+      const portalize = (node) => {
+        if (!node) return null
+        try {
+          if (
+            ReactDOM &&
+            typeof ReactDOM.createPortal === 'function' &&
+            typeof document !== 'undefined' &&
+            document.body
+          ) {
+            return ReactDOM.createPortal(node, document.body)
+          }
+        } catch {}
+        return node
       }
 
       return h(
@@ -1081,33 +1408,54 @@ window.__ModuleLoader__.load({
           ),
         ),
         open
-          ? h(
-              'div',
-              {
-                className: 'dshpf-pop',
-                style: {
-                  position: 'absolute',
-                  bottom: 'calc(100% + 8px)',
-                  left: 0,
-                  zIndex: 1200,
-                  width: 360,
-                  maxHeight: '72vh',
-                  overflowY: 'auto',
-                  padding: 12,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 10,
-                  borderRadius: tokens.radiusLg,
-                  border: '0.5px solid ' + tokens.cardStroke,
-                  background: tokens.cardFill,
-                  boxShadow: tokens.shadow,
-                  color: tokens.text,
+          ? portalize(
+              h(
+                'div',
+                {
+                  ref: popoverRef,
+                  className: 'dshpf-pop',
+                  style: {
+                    zIndex: 2147483000,
+                    boxSizing: 'border-box',
+                    overflow: 'hidden',
+                    // 右侧只留 2px，让滚动条贴着面板右边框，和 DSH 主面板一致；文字间距由内层 padding 负责。
+                    padding: '12px 2px 12px 12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                    borderRadius: tokens.radiusLg,
+                    border: '0.5px solid ' + tokens.cardStroke,
+                    background: tokens.cardFill,
+                    boxShadow: tokens.shadow,
+                    color: tokens.text,
+                    ...(popoverStyle ?? { position: 'fixed', left: 12, bottom: 80, width: 360, maxHeight: 420 }),
+                  },
                 },
-              },
+                h(
+                  'div',
+                  {
+                    style: {
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                      flex: '1 1 auto',
+                      minHeight: 0,
+                      overflowY: 'auto',
+                      overscrollBehavior: 'contain',
+                      scrollbarGutter: 'stable',
+                      // 文字与滚动条之间留一点距离，滚动条本身贴内层右边缘。
+                      paddingRight: 10,
+                    },
+                  },
               h(
                 'div',
                 { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-                h('span', { style: { fontSize: 13, fontWeight: 500 } }, t('quickTitle')),
+                h(
+                  'div',
+                  { style: { display: 'flex', flexDirection: 'column', minWidth: 0, gap: 0 } },
+                  h('span', { style: { fontSize: 10, lineHeight: '14px', color: tokens.caption } }, 'dsh-HelpMe-To-Ask'),
+                  h('span', { style: { fontSize: 13, fontWeight: 500 } }, t('quickTitle')),
+                ),
                 h(
                   'span',
                   { style: { marginLeft: 'auto' } },
@@ -1121,6 +1469,8 @@ window.__ModuleLoader__.load({
                 disabled: !writable,
                 sessionSkipped: skipped,
                 onSelectSession: (next) => writeSession('skipClarify', next),
+                onceArmed: sessionPrefs?.onceArmed === true,
+                onSelectOnce: (next) => writeSession('onceArmed', next),
                 onChange: (next) => write('triggerMode', next),
               }),
               h('div', { style: { fontSize: 11, lineHeight: '16px', color: tokens.caption } }, t('triggerHint')),              h('div', { style: { fontSize: 12, color: tokens.secondary, marginTop: 2 } }, t('sectionBehavior')),
@@ -1150,6 +1500,8 @@ window.__ModuleLoader__.load({
                 ),
               }),
               h('div', { style: { fontSize: 11, lineHeight: '16px', color: tokens.caption } }, t('quickHint')),
+              ),
+              ),
             )
           : null,
       )

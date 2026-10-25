@@ -14,9 +14,27 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 const ROUTE_PREFIX = '/dsh-help-me-to-ask'
-const VERSION = '1.0.0'
+const VERSION = '1.0.3'
 
 const DRIFT_SIGNAL_RE = /(换个|改成|改为|换方向|重新来|不是这个|不对|先停|算了|改主意|调整目标|另一个需求|重新做)/
+
+// 纯打招呼不触发插件，等用户出现真正的工作意图（一次性接管除外）。
+const GREETING_WORDS = [
+  '你好', '您好', '在吗', '在不在', '在嘛', '嗨', '哈喽', 'hello', 'hi', 'hey',
+  '早上好', '早安', '晚上好', '晚安', '谢谢', '感谢', '多谢', '辛苦了',
+  '好的', '好', 'ok', 'okay', '嗯', '哈哈',
+]
+function isGreetingOnly(text) {
+  if (typeof text !== 'string') return false
+  let cleaned = text.toLowerCase().replace(/[\s!！。,.，~～?？、…]/g, '')
+  cleaned = cleaned.replace(/(呀|啊|喵|呢|哦|啦)+$/, '')
+  if (!cleaned || cleaned.length > 14) return false
+  return GREETING_WORDS.some((word) => {
+    if (word === '嗯') return /^嗯+$/.test(cleaned)
+    if (word === '哈哈') return /^哈+$/.test(cleaned)
+    return cleaned === word
+  })
+}
 
 export const name = 'dsh-help-me-to-ask'
 
@@ -100,9 +118,42 @@ function createSessionStore(ctx) {
 function normalizeEntry(value) {
   return {
     skipClarify: value?.skipClarify === true,
+    onceArmed: value?.onceArmed === true,
+    intentHandled: value?.intentHandled === true,
     brief: value?.brief && typeof value.brief === 'object' ? value.brief : undefined,
     updatedAt: typeof value?.updatedAt === 'number' ? value.updatedAt : undefined,
   }
+}
+
+/**
+ * 一次性接管状态：global，不写进插件配置（宿主只能读配置，写回由客户端做）。
+ * armed=true 时，下一次符合条件的新对话会强制走一遍提问流程，随后自动关闭。
+ * fallback 记录激活前的模式，供界面回显/兜底。
+ */
+function oncePath() {
+  return join(dshHome(), 'dsh-help-me-to-ask-once.json')
+}
+function readOnce() {
+  try {
+    const raw = JSON.parse(readFileSync(oncePath(), 'utf8'))
+    return {
+      armed: raw?.armed === true,
+      fallback: typeof raw?.fallback === 'string' ? raw.fallback : 'vague',
+      updatedAt: typeof raw?.updatedAt === 'number' ? raw.updatedAt : undefined,
+    }
+  } catch {
+    return { armed: false, fallback: 'vague' }
+  }
+}
+function writeOnce(next) {
+  try {
+    writeFileSync(oncePath(), JSON.stringify({ ...next, updatedAt: Date.now() }), 'utf8')
+  } catch {}
+}
+function consumeOnce() {
+  const current = readOnce()
+  if (current.armed) writeOnce({ armed: false, fallback: current.fallback })
+  return current
 }
 
 function isSubagentSession(agent) {
@@ -211,16 +262,23 @@ async function handlePreStep(ctx, config, seen, pendings, sessions, agent, paylo
     if (signal?.aborted) return next()
     if (!isRootAgent(ctx, agent)) return next()
     const store = sessions.get(sessionId)
-    if (store.skipClarify) {
+    const onceArmed = store.onceArmed === true
+    if (store.skipClarify && !onceArmed) {
       diag('skip', { sessionId, reason: 'session-skip' })
       return next()
     }
     const text = extractUserText(messages, config)
     if (!text) return next()
 
-    if (turn !== 1) {
+    // 纯打招呼不触发，省 token；等用户出现工作意图再说（“帮我一下”一次性接管除外）。
+    if (!onceArmed && isGreetingOnly(text)) {
+      diag('skip', { sessionId, turn, reason: 'greeting-only' })
+      return next()
+    }
+
+    // 已有简报的后续消息：只处理“改口”提示（一次性接管走完整流程）。
+    if (turn !== 1 && !onceArmed && store.brief) {
       if (config.watchTurns.get() !== true) return next()
-      if (!store.brief) return next()
       if (!DRIFT_SIGNAL_RE.test(text)) return next()
       if (seen.has(agent.session + ':drift:' + String(turn))) return next()
       seen.add(agent.session + ':drift:' + String(turn))
@@ -235,15 +293,26 @@ async function handlePreStep(ctx, config, seen, pendings, sessions, agent, paylo
       return next()
     }
 
-    if (seen.has(agent.session)) return next()
-    seen.add(agent.session)
-    if (!shouldTrigger(config, diag, text, sessionId)) return next()
+    // 每个会话只处理“第一段有意义的工作内容”；问候之后才出现也可以。
+    if (!onceArmed) {
+      if (store.intentHandled === true) return next()
+      if (config.triggerMode.get() === 'off') {
+        diag('skip', { sessionId, reason: 'trigger-off' })
+        return next()
+      }
+      if (turn === 1 && !shouldTrigger(config, diag, text, sessionId)) return next()
+    }
 
     const analysis = await analyze(ctx, config, { text, diag })
     if (!analysis) return next()
     diag('analyze', { sessionId, analysis })
     const mode = config.triggerMode.get()
-    const shouldAsk = mode === 'always' ? true : analysis.needClarify === true || (mode === 'complex' && analysis.complexity === 'high')
+    const shouldAsk = onceArmed || mode === 'always'
+      ? true
+      : analysis.needClarify === true || (mode === 'complex' && analysis.complexity === 'high')
+    // 本会话的“首段工作内容”已处理；一次性接管同时自动关闭。
+    sessions.set(sessionId, onceArmed ? { onceArmed: false, intentHandled: true } : { intentHandled: true })
+    if (onceArmed) diag('once', { sessionId, turn })
     if (!shouldAsk) {
       diag('skip', { sessionId, reason: 'no-clarify-needed', mode, complexity: analysis.complexity })
       return next()
@@ -562,7 +631,9 @@ async function resolveBrain(ctx, config, catalog, signal) {
   return undefined
 }
 
-const BRAIN_TIMEOUT_MS = 20000
+const BRAIN_TIMEOUT_MS = 45000
+// 最大推理档会消耗较多 reasoning token；预算太小会在 JSON 写完前被 max-tokens 截断。
+const BRAIN_TOKEN_BUDGETS = [4096, 12000]
 
 async function brainCall(ctx, config, { system, prompt, diag }) {
   const llm = ctx.get('llm')
@@ -573,42 +644,49 @@ async function brainCall(ctx, config, { system, prompt, diag }) {
     diag('brain', { error: 'no-route' })
     return undefined
   }
-  const controller = new AbortController()
-  const timer = setTimeout(() => {
+  for (let attempt = 0; attempt < BRAIN_TOKEN_BUDGETS.length; attempt += 1) {
+    const maxTokens = BRAIN_TOKEN_BUDGETS[attempt]
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      try {
+        controller.abort(new Error('brain timeout'))
+      } catch {}
+    }, BRAIN_TIMEOUT_MS)
+    let output = ''
+    let finish
     try {
-      controller.abort(new Error('brain timeout'))
-    } catch {}
-  }, BRAIN_TIMEOUT_MS)
-  let output = ''
-  let finish
-  try {
-    const stream = llm.stream({
-      provider: route.provider,
-      model: route.model,
-      ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}),
-      temperature: 0,
-      maxTokens: 1600,
-      system,
-      messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
-      signal: controller.signal,
-    })
-    for await (const chunk of stream) {
-      if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') output += chunk.text
-      else if (chunk?.type === 'finish') finish = chunk.reason
-    }
-    if (finish !== undefined && finish?.kind !== 'stop') {
-      diag('brain', { error: 'bad-finish', finish, route })
+      const stream = llm.stream({
+        provider: route.provider,
+        model: route.model,
+        ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}),
+        temperature: 0,
+        maxTokens,
+        system,
+        messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+        signal: controller.signal,
+      })
+      for await (const chunk of stream) {
+        if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') output += chunk.text
+        else if (chunk?.type === 'finish') finish = chunk.reason
+      }
+      if (finish !== undefined && finish?.kind !== 'stop') {
+        diag('brain', { error: 'bad-finish', attempt, finish, route, maxTokens })
+        if (finish?.kind === 'max-tokens' && attempt + 1 < BRAIN_TOKEN_BUDGETS.length) continue
+        return undefined
+      }
+      const parsed = parseJsonObject(output)
+      diag('brain', { route, attempt, maxTokens, parsed: parsed ?? null })
+      if (parsed) return parsed
+      if (attempt + 1 < BRAIN_TOKEN_BUDGETS.length) continue
       return undefined
+    } catch (error) {
+      diag('brain', { error: errorText(error), attempt, route, maxTokens })
+      return undefined
+    } finally {
+      clearTimeout(timer)
     }
-    const parsed = parseJsonObject(output)
-    diag('brain', { route, parsed: parsed ?? null })
-    return parsed
-  } catch (error) {
-    diag('brain', { error: errorText(error), route })
-    return undefined
-  } finally {
-    clearTimeout(timer)
   }
+  return undefined
 }
 
 const ANALYZE_SYSTEM =
@@ -644,7 +722,23 @@ function analyzePrompt(text) {
 
 async function analyze(ctx, config, { text, diag }) {
   const parsed = await brainCall(ctx, config, { system: ANALYZE_SYSTEM, prompt: analyzePrompt(text), diag })
-  if (!parsed || typeof parsed !== 'object') return undefined
+  if (!parsed || typeof parsed !== 'object') {
+    // 分析服务偶发失败（超时/截断）时不再静默跳过，给一张最小澄清卡让用户补目标。
+    diag('analyze-fallback', { textLength: text.length })
+    return {
+      understanding: '',
+      clarity: 'vague',
+      complexity: 'medium',
+      needClarify: true,
+      missing: ['goal', 'deliverable'],
+      goalOptions: [],
+      deliverableOptions: [],
+      constraintOptions: [],
+      acceptanceOptions: [],
+      yesNo: [],
+      reason: '自动分析暂时不可用，先手动确认一下目标。',
+    }
+  }
   return normalizeAnalysis(parsed)
 }
 
@@ -813,11 +907,27 @@ async function handleRoute(ctx, config, pendings, sessions, req, res, diag) {
       } catch {}
       return sendJson(res, 200, { ok: true })
     }
+    // 一次性接管：读/写“下一次接管并自动恢复”的状态
+    if (req.method === 'GET' && path === '/once') {
+      return sendJson(res, 200, { ok: true, once: readOnce() })
+    }
+    if (req.method === 'POST' && path === '/once') {
+      const body = await readJsonBody(req)
+      if (body?.armed === true) {
+        const fallback = typeof body?.fallback === 'string' && body.fallback !== 'once' ? body.fallback : 'vague'
+        writeOnce({ armed: true, fallback })
+        diag('route', { path: '/once', armed: true, fallback })
+        return sendJson(res, 200, { ok: true, once: readOnce() })
+      }
+      writeOnce({ armed: false, fallback: readOnce().fallback })
+      diag('route', { path: '/once', armed: false })
+      return sendJson(res, 200, { ok: true, once: readOnce() })
+    }
     if (req.method === 'GET' && path === '/session-prefs') {
       const sessionId = url.searchParams.get('sessionId') ?? ''
       if (!sessionId) return sendJson(res, 400, { ok: false, error: 'sessionId is required' })
       const entry = sessions.get(sessionId)
-      return sendJson(res, 200, { ok: true, prefs: { skipClarify: entry.skipClarify }, brief: entry.brief ?? null })
+      return sendJson(res, 200, { ok: true, prefs: { skipClarify: entry.skipClarify, onceArmed: entry.onceArmed }, brief: entry.brief ?? null })
     }
     if (req.method === 'POST' && path === '/session-prefs') {
       const body = await readJsonBody(req)
@@ -825,9 +935,10 @@ async function handleRoute(ctx, config, pendings, sessions, req, res, diag) {
       if (!sessionId) return sendJson(res, 400, { ok: false, error: 'sessionId is required' })
       const patch = {}
       if (typeof body?.skipClarify === 'boolean') patch.skipClarify = body.skipClarify
+      if (typeof body?.onceArmed === 'boolean') patch.onceArmed = body.onceArmed
       const entry = sessions.set(sessionId, patch)
-      diag('route', { path: '/session-prefs', sessionId, prefs: { skipClarify: entry.skipClarify } })
-      return sendJson(res, 200, { ok: true, prefs: { skipClarify: entry.skipClarify } })
+      diag('route', { path: '/session-prefs', sessionId, prefs: { skipClarify: entry.skipClarify, onceArmed: entry.onceArmed } })
+      return sendJson(res, 200, { ok: true, prefs: { skipClarify: entry.skipClarify, onceArmed: entry.onceArmed } })
     }
     if (req.method === 'GET' && (path === '/state' || path === '/')) {
       const catalog = await getCatalog(ctx, undefined)
