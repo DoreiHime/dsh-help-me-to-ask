@@ -28,9 +28,54 @@ window.__ModuleLoader__.load({
       maxClarifyRounds: 3,
       watchTurns: true,
       briefConfirm: true,
+      soundAlert: true,
       brainProvider: '',
       brainModel: '',
       brainEffort: '',
+    }
+
+    /** 目标卡出现时的短提示音；用 Web Audio 合成，不依赖外部音频文件。 */
+    function playNoticeSound() {
+      try {
+        const Ctor = window.AudioContext || window.webkitAudioContext
+        if (!Ctor) return
+        const audio = new Ctor()
+        const now = audio.currentTime
+        const master = audio.createGain()
+        master.gain.setValueAtTime(0.0001, now)
+        master.gain.exponentialRampToValueAtTime(0.16, now + 0.02)
+        master.gain.exponentialRampToValueAtTime(0.0001, now + 0.9)
+        master.connect(audio.destination)
+        const notes = [
+          [659.25, 0],
+          [987.77, 0.13],
+        ]
+        for (const [freq, delay] of notes) {
+          const osc = audio.createOscillator()
+          const gain = audio.createGain()
+          osc.type = 'sine'
+          osc.frequency.value = freq
+          gain.gain.setValueAtTime(0.0001, now + delay)
+          gain.gain.exponentialRampToValueAtTime(0.5, now + delay + 0.02)
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.6)
+          osc.connect(gain)
+          gain.connect(master)
+          osc.start(now + delay)
+          osc.stop(now + delay + 0.65)
+        }
+        setTimeout(() => {
+          try {
+            audio.close?.()
+          } catch {}
+        }, 1400)
+      } catch {}
+    }
+
+    function formatCountdown(ms) {
+      const total = Math.max(0, Math.ceil(ms / 1000))
+      const minutes = Math.floor(total / 60)
+      const seconds = total % 60
+      return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0')
     }
 
     const DICTIONARIES = {
@@ -103,6 +148,11 @@ window.__ModuleLoader__.load({
         contextLabel: 'Your notes',
         yesNoLabel: 'A few quick questions',
         contextPlaceholder: 'Anything else the model should know…',
+        draftHint: 'Answers are saved locally as you type; press “still writing” to add 5 minutes.',
+        needMoreTime: 'Still writing · +5 min',
+        timeLeft: 'Time left',
+        soundAlert: 'Play a chime when the form appears',
+        soundAlertHint: 'A short notification sound reminds you to fill the card; turn it off to stay silent.',
         customGoalPlaceholder: 'Or type your goal directly…',
         autoBrief: 'One-click brief',
         makeBrief: 'Create brief',
@@ -200,6 +250,11 @@ window.__ModuleLoader__.load({
         contextLabel: '个人想法',
         yesNoLabel: '还有几个问题',
         contextPlaceholder: '还有什么模型应该知道的，写在这里…',
+        draftHint: '填写内容会边写边暂存在本机；没写完可点「还没写完」续 5 分钟。',
+        needMoreTime: '还没写完！+5 分钟',
+        timeLeft: '剩余',
+        soundAlert: '弹卡时响一声提示音',
+        soundAlertHint: '用短提示音提醒你填卡；关掉后完全安静。',
         customGoalPlaceholder: '或者直接写你的目标…',
         autoBrief: '一键明确目标',
         makeBrief: '生成任务简报',
@@ -751,9 +806,13 @@ window.__ModuleLoader__.load({
     /* ---------------- 澄清卡 / 简报卡 ---------------- */
 
     function PendingCard(props) {
-      const { sessionId, t } = props
+      const { sessionId, t, scope } = props
+      const { valueOf } = useScopeValues(scope)
+      const soundAlert = valueOf('soundAlert') !== false
       const [pending, setPending] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
+      const [extending, setExtending] = React.useState(false)
+      const [nowTick, setNowTick] = React.useState(Date.now())
       const [goal, setGoal] = React.useState('')
       const [deliverable, setDeliverable] = React.useState('')
       const [constraints, setConstraints] = React.useState([])
@@ -783,7 +842,41 @@ window.__ModuleLoader__.load({
       }, [sessionId])
 
       const key = pending === null ? '' : String(pending.createdAt ?? '') + ':' + String(pending.kind ?? '')
+      const draftKey = sessionId ? 'dsh-help-me-to-ask:draft:' + sessionId : ''
+      const readDraft = () => {
+        if (!draftKey) return null
+        try {
+          const raw = window.localStorage.getItem(draftKey)
+          return raw ? JSON.parse(raw) : null
+        } catch {
+          return null
+        }
+      }
+      const writeDraft = (value) => {
+        if (!draftKey) return
+        try {
+          window.localStorage.setItem(draftKey, JSON.stringify(value))
+        } catch {}
+      }
+      const clearDraft = () => {
+        if (!draftKey) return
+        try {
+          window.localStorage.removeItem(draftKey)
+        } catch {}
+      }
+
       React.useEffect(() => {
+        if (!pending) return
+        const saved = readDraft()
+        if (saved && saved.kind === pending.kind) {
+          setGoal(typeof saved.goal === 'string' ? saved.goal : '')
+          setDeliverable(typeof saved.deliverable === 'string' ? saved.deliverable : '')
+          setConstraints(Array.isArray(saved.constraints) ? saved.constraints : [])
+          setAcceptance(Array.isArray(saved.acceptance) ? saved.acceptance : [])
+          setYesNo(saved.yesNo && typeof saved.yesNo === 'object' ? saved.yesNo : {})
+          setCustom(typeof saved.custom === 'string' ? saved.custom : '')
+          return
+        }
         setGoal('')
         setDeliverable('')
         setConstraints([])
@@ -792,16 +885,57 @@ window.__ModuleLoader__.load({
         setCustom('')
       }, [key])
 
+      // 草稿落本机：卡片被超时收走、刷新页面或重启后都能把填写内容找回来。
+      const draftKind = pending?.kind ?? ''
+      React.useEffect(() => {
+        if (!pending || draftKind !== 'clarify') return
+        writeDraft({ kind: draftKind, goal, deliverable, constraints, acceptance, yesNo, custom, savedAt: Date.now() })
+      }, [key, draftKind, goal, deliverable, constraints, acceptance, yesNo, custom])
+
+      const remainingMs = typeof pending?.expiresAt === 'number' ? Math.max(0, pending.expiresAt - nowTick) : undefined
+      React.useEffect(() => {
+        if (!pending || typeof pending.expiresAt !== 'number') return undefined
+        const timer = setInterval(() => setNowTick(Date.now()), 500)
+        return () => clearInterval(timer)
+      }, [key, pending?.expiresAt])
+
+      // 提问卡出现时提醒一声（可在设置里关掉）。
+      React.useEffect(() => {
+        if (!pending || pending.kind !== 'clarify' || !soundAlert) return
+        playNoticeSound()
+      }, [key, soundAlert])
+
+      const extendDeadline = async () => {
+        if (!sessionId || extending) return
+        setExtending(true)
+        try {
+          const response = await fetch(API + '/extend', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ sessionId, seconds: 300 }),
+          })
+          if (response.ok) {
+            const data = await response.json()
+            if (typeof data?.expiresAt === 'number') {
+              setPending((previous) => (previous ? { ...previous, expiresAt: data.expiresAt } : previous))
+              setNowTick(Date.now())
+            }
+          }
+        } catch {}
+        setExtending(false)
+      }
+
       const decide = async (payload) => {
         if (busy) return
         setBusy(true)
         setPending(null)
         try {
-          await fetch(API + '/decide', {
+          const response = await fetch(API + '/decide', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ sessionId, ...payload }),
           })
+          if (response.ok) clearDraft()
         } catch {}
         setBusy(false)
       }
@@ -1102,12 +1236,48 @@ window.__ModuleLoader__.load({
               },
               onChange: (event) => setCustom(event.target.value),
             }),
+            h('div', { style: { fontSize: 11, lineHeight: '16px', color: tokens.caption } }, t('draftHint')),
           ),
         ),
         h(
           'div',
           { style: footerStyle },
-          h('button', { type: 'button', style: buttonStyle('secondary'), disabled: busy, onClick: () => decide({ value: { autoBrief: true } }) }, t('autoBrief')),
+          h(
+            'div',
+            { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 } },
+            h('button', { type: 'button', style: buttonStyle('secondary'), disabled: busy, onClick: () => decide({ value: { autoBrief: true } }) }, t('autoBrief')),
+            h(
+              'button',
+              {
+                type: 'button',
+                style: {
+                  ...buttonStyle('secondary'),
+                  color: 'var(--dsw-alias-state-warn-primary, #d4a13d)',
+                  borderColor: 'color-mix(in srgb, var(--dsw-alias-state-warn-primary, #d4a13d) 55%, transparent)',
+                },
+                disabled: busy || extending,
+                onClick: extendDeadline,
+              },
+              t('needMoreTime'),
+            ),
+            remainingMs !== undefined
+              ? h(
+                  'span',
+                  {
+                    style: {
+                      fontSize: 12,
+                      lineHeight: '18px',
+                      whiteSpace: 'nowrap',
+                      color:
+                        remainingMs <= 60_000
+                          ? 'var(--dsw-alias-state-error-primary, #d9534f)'
+                          : tokens.caption,
+                    },
+                  },
+                  t('timeLeft') + ' ' + formatCountdown(remainingMs),
+                )
+              : null,
+          ),
           h(
             'button',
             {
@@ -1473,6 +1643,15 @@ window.__ModuleLoader__.load({
                   checked: valueOf('briefConfirm') === true,
                   disabled: !writable,
                   onChange: (next) => write('briefConfirm', next),
+                }),
+              }),
+              h(Row, {
+                label: t('soundAlert'),
+                hint: t('soundAlertHint'),
+                children: h(Toggle, {
+                  checked: valueOf('soundAlert') !== false,
+                  disabled: !writable,
+                  onChange: (next) => write('soundAlert', next),
                 }),
               }),
               h(Row, {

@@ -19,7 +19,7 @@
 > 在 DSH 的插件安装输入框里填：
 >
 > ```
-> dsh-help-me-to-ask@1.0.4
+> dsh-help-me-to-ask@1.0.5
 > ```
 >
 > 带版本号可以跳过 npm 新版本的 24 小时观察期；只写包名时，DSH 可能先给你装稍旧的 1.0.2。
@@ -38,6 +38,8 @@
 > 要做成什么 / 最后给你什么 / 限制（能改哪些、用什么）/ 怎样算做好 / 明确不碰的 / 没问到、先这样定
 
 看一眼，确认、改一改、或者直接跳过。确认之后，模型就知道自己到底要做什么、做到什么程度算完成。
+
+卡片出现时会响一声提示音（可在设置里关掉）；最多保留 10 分钟，底部有倒计时，填不完可以点「还没写完！+5 分钟」续时；填写内容会边写边暂存在本机，刷新页面或重启也能恢复。
 
 ### 什么时候会出现
 
@@ -70,6 +72,7 @@
 - **后续目标变化时提示更新任务说明**：只在你明确说“换个 / 改成 / 重新来”这类话时才会出现，不会每轮都打扰；
 - **开始前先看任务说明**；
 - **最多追问轮数**；
+- **弹卡时响一声提示音**：不想被声音打扰可以关掉；
 - **大脑模型**：插件自己分析需求时用的模型。默认自动选 DSH 里最新的 DeepSeek 模型 + Max 推理；也可以自己选客户端里任意可用的模型和推理档位。
 
 ### 怎么装
@@ -85,7 +88,7 @@ dsh plugin add dsh-help-me-to-ask
 **想直接装最新版**：在插件安装输入框里带版本号：
 
 ```
-dsh-help-me-to-ask@1.0.4
+dsh-help-me-to-ask@1.0.5
 ```
 
 这是因为 pnpm 默认会给新发布的版本一个 24 小时观察期；带准确版本号可以越过它。或者下载 release 里的 tgz 用本地安装。装好之后重启 DSH（或刷新页面），输入框左边就能看到它了。
@@ -127,7 +130,7 @@ That’s all it does. Before answering, it helps you state your request clearly,
 > In the DSH plugin install field, enter:
 >
 > ```
-> dsh-help-me-to-ask@1.0.4
+> dsh-help-me-to-ask@1.0.5
 > ```
 >
 > Pinning the exact version skips pnpm’s 24-hour release-age gate. With the bare package name, DSH may install the slightly older 1.0.2 first.
@@ -146,6 +149,8 @@ After you answer (or skip), it produces a very short task sheet:
 > What to make / What you get / Limits (what may be touched, what to use) / How we know it’s done / What not to touch / Guesses for gaps
 
 Check it, confirm, modify, or skip. Once confirmed, the model knows exactly what to do and what “done” means.
+
+A short chime plays when the card appears (can be muted in settings). The card stays for up to 10 minutes with a visible countdown; press “Still writing · +5 min” to extend it. Answers are saved locally as you type, so a refresh or restart restores them.
 
 ### When it appears
 
@@ -178,6 +183,7 @@ Settings → Ask Guide:
 - **Offer to update the task sheet when the goal changes** — only reacts to explicit change phrases (“instead”, “redo”, “change it to…”), never nags every turn;
 - **Review the task sheet before starting**;
 - **Max follow-up rounds**;
+- **Play a chime when the form appears** — turn it off if you prefer silence;
 - **Brain model** — the model used for the plugin’s own analysis. By default it auto-picks the newest DeepSeek model in DSH with Max reasoning; you can also choose any available model and reasoning level from the client.
 
 ### Install
@@ -193,7 +199,7 @@ dsh plugin add dsh-help-me-to-ask
 **To install the newest version directly**, pin the version in the install field:
 
 ```
-dsh-help-me-to-ask@1.0.4
+dsh-help-me-to-ask@1.0.5
 ```
 
 pnpm gives freshly published versions a 24-hour observation window by default; pinning the exact version bypasses it. You can also download the tgz from a release and install locally. Restart DSH (or refresh the page) and the switch will appear next to the input box.

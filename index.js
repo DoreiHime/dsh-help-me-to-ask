@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 const ROUTE_PREFIX = '/dsh-help-me-to-ask'
-const VERSION = '1.0.4'
+const VERSION = '1.0.5'
 
 const DRIFT_SIGNAL_RE = /(换个|改成|改为|换方向|重新来|不是这个|不对|先停|算了|改主意|调整目标|另一个需求|重新做)/
 
@@ -49,6 +49,7 @@ export const Config = z.object({
   maxClarifyRounds: z.number().default(3).volatile(),
   watchTurns: z.boolean().default(true).volatile(),
   briefConfirm: z.boolean().default(true).volatile(),
+  soundAlert: z.boolean().default(true).volatile(),
   brainProvider: z.string().default('').volatile(),
   brainModel: z.string().default('').volatile(),
   brainEffort: z.string().default('').volatile(),
@@ -844,7 +845,16 @@ async function buildBrief(ctx, config, { text, answers, brief, diag, mode }) {
 async function requestInteraction(ctx, config, pendings, agent, signal, kind, data, diag) {
   const sessionId = idOf(agent)
   const claimWaitMs = clampInt(config.cardClaimWaitMs.get(), 200, 15000, 2500)
-  const pending = { sessionId, kind, data, createdAt: Date.now(), claimed: false, resolve: undefined }
+  const pending = {
+    sessionId,
+    kind,
+    data,
+    createdAt: Date.now(),
+    claimed: false,
+    resolve: undefined,
+    deadline: Date.now() + 600_000,
+    extend: undefined,
+  }
   pendings.set(sessionId, pending)
   const outcome = await new Promise((resolve) => {
     let settled = false
@@ -858,7 +868,21 @@ async function requestInteraction(ctx, config, pendings, agent, signal, kind, da
       resolve(value)
     }
     pending.resolve = finish
-    timeout = setTimeout(() => finish({ type: 'timeout' }), 180_000)
+    // 用户可能认真填写；默认 10 分钟，还可以点“还没写完”每次续 5 分钟。
+    const schedule = (ms) => {
+      try {
+        clearTimeout(timeout)
+      } catch {}
+      pending.deadline = Date.now() + ms
+      timeout = setTimeout(() => finish({ type: 'timeout' }), ms)
+    }
+    pending.extend = (extraMs) => {
+      if (settled) return false
+      const remaining = Math.max(0, (pending.deadline ?? Date.now()) - Date.now())
+      schedule(remaining + extraMs)
+      return true
+    }
+    schedule(600_000)
     if (signal !== undefined && typeof signal.addEventListener === 'function') {
       signal.addEventListener('abort', () => finish({ type: 'aborted' }), { once: true })
     }
@@ -868,6 +892,7 @@ async function requestInteraction(ctx, config, pendings, agent, signal, kind, da
   })
   pendings.delete(sessionId)
   pending.resolve = undefined
+  pending.extend = undefined
   diag('interaction', { sessionId, kind, outcome: outcome?.type, claimed: pending.claimed === true })
   return outcome ?? { type: 'timeout' }
 }
@@ -878,6 +903,7 @@ function serializePending(pending) {
     kind: pending.kind,
     claimed: pending.claimed === true,
     createdAt: pending.createdAt,
+    expiresAt: pending.deadline,
     ...(pending.data ?? {}),
   }
 }
@@ -898,6 +924,18 @@ async function handleRoute(ctx, config, pendings, sessions, req, res, diag) {
       if (!pending) return sendJson(res, 200, { ok: true, pending: null })
       pending.claimed = true
       return sendJson(res, 200, { ok: true, pending: serializePending(pending) })
+    }
+    if (req.method === 'POST' && path === '/extend') {
+      const body = await readJsonBody(req)
+      const sessionId = typeof body?.sessionId === 'string' ? body.sessionId : ''
+      const pending = pendings.get(sessionId)
+      if (!pending || typeof pending.extend !== 'function') {
+        return sendJson(res, 404, { ok: false, error: 'no pending interaction for this session' })
+      }
+      const extraMs = clampInt(body?.seconds, 60, 3600, 300) * 1000
+      pending.extend(extraMs)
+      diag('route', { path: '/extend', sessionId, seconds: extraMs / 1000, expiresAt: pending.deadline })
+      return sendJson(res, 200, { ok: true, expiresAt: pending.deadline })
     }
     if (req.method === 'POST' && path === '/decide') {
       const body = await readJsonBody(req)
@@ -1000,6 +1038,7 @@ function readConfigSnapshot(config) {
     maxClarifyRounds: config.maxClarifyRounds.get(),
     watchTurns: config.watchTurns.get(),
     briefConfirm: config.briefConfirm.get(),
+    soundAlert: config.soundAlert.get(),
     brainProvider: config.brainProvider.get(),
     brainModel: config.brainModel.get(),
     brainEffort: config.brainEffort.get(),
